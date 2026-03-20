@@ -1,0 +1,176 @@
+/* Estilos da sidebar modernizada */
+.sidebar-header {
+    padding: 1.5rem 1rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(145deg, #f8f9fa, #ffffff);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    margin-bottom: 1rem;
+}
+
+.logo-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: transform 0.3s ease;
+}
+
+.logo-container:hover {
+    transform: scale(1.05);
+}
+
+.logo {
+    max-width: 200px;
+    height: auto;
+    filter: drop-shadow(0px 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+/* Estilos para o botão do menu mobile */
+.navbar-toggler {
+    appearance: none;
+    cursor: pointer;
+    width: 20px;
+    height: 20px;
+    color: white;
+    position: absolute;
+    top: 18px;
+    right: 1rem;
+    padding: 16px;
+    border: none;
+    border-radius: 8px;
+    background: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='%238257E5' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e") no-repeat center/1.75rem transparent;
+    transition: background-color 0.3s ease;
+}
+
+.navbar-toggler:checked {
+    background-color: rgba(130, 87, 229, 0.1);
+}
+
+/* Estilização dos itens do menu */
+.nav-item {
+    font-size: 0.9rem;
+    padding-bottom: 0.75rem;
+}
+
+.nav-item:first-of-type {
+    padding-top: 0.5rem;
+}
+
+.nav-item:last-of-type {
+    padding-bottom: 1.5rem;
+}
+
+/* Links de navegação */
+.nav-item ::deep .nav-link {
+    color: #1f1f1f;
+    background: transparent;
+    border: none;
+    border-left: 3px solid transparent;
+    border-radius: 12px;
+    height: 3rem;
+    padding: 0 1rem;
+    display: flex;
+    align-items: center;
+    line-height: 3rem;
+    width: 100%;
+    transition: all 0.3s ease;
+    font-weight: 500;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Ícones do menu */
+.nav-item ::deep .nav-icon {
+    margin-right: 12px;
+    font-size: 1rem;
+    width: 20px;
+    text-align: center;
+    transition: transform 0.3s ease;
+}
+
+/* Estado ativo */
+.nav-item ::deep a.active {
+    background-color: rgba(130, 87, 229, 0.1);
+    border-left: 3px solid #8257E5;
+    color: #8257E5;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(130, 87, 229, 0.1);
+}
+
+.nav-item ::deep a.active .nav-icon {
+    color: #8257E5;
+}
+
+/* Efeito hover */
+.nav-item ::deep .nav-link:hover {
+    background-color: rgba(130, 87, 229, 0.05);
+    color: #8257E5;
+    transform: translateX(3px);
+}
+
+.nav-item ::deep .nav-link:hover .nav-icon {
+    transform: scale(1.2);
+    color: #8257E5;
+}
+
+/* Estilo especial para o botão de logout */
+.nav-item ::deep .logout-btn {
+    color: #6c757d;
+    font-weight: 500;
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
+    margin-top: 1rem;
+    padding-top: 0.5rem;
+}
+
+.nav-item ::deep .logout-btn:hover {
+    color: #dc3545;
+    background-color: rgba(220, 53, 69, 0.05);
+}
+
+.nav-item ::deep .logout-btn:hover .nav-icon {
+    color: #dc3545;
+}
+
+/* Menu de navegação para mobile */
+.nav-scrollable {
+    display: none;
+    padding-top: 0.5rem;
+}
+
+.navbar-toggler:checked ~ .nav-scrollable {
+    display: block;
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Media queries para responsividade */
+@media (min-width: 641px) {
+    .navbar-toggler {
+        display: none;
+    }
+
+    .nav-scrollable {
+        display: block;
+        overflow-y: auto;
+        max-height: calc(100vh - 9rem);
+        padding-bottom: 2rem;
+    }
+    
+    .nav-scrollable::-webkit-scrollbar {
+        width: 4px;
+    }
+    
+    .nav-scrollable::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    
+    .nav-scrollable::-webkit-scrollbar-thumb {
+        background-color: rgba(130, 87, 229, 0.3);
+        border-radius: 10px;
+    }
+}

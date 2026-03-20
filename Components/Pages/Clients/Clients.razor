@@ -1,0 +1,395 @@
+@page "/Clients"
+@inject IClientsService ClientsService
+@inject IUtilsService UtilsService
+@inject IReportService ReportService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IJSRuntime JSRuntime
+@using System.Security.Claims
+@using FreelanceManager.IO.Clients
+@using FreelanceManager.Services.Clients
+@using FreelanceManager.Services.Utils
+@using Microsoft.AspNetCore.Authorization
+@using Syncfusion.Blazor.DropDowns
+
+@rendermode InteractiveServer
+@attribute [Authorize]
+
+<div class="clients-container">    
+    <div class="page-header">
+        <h3>Clients</h3>
+        <div class="flex gap-10">
+            <SfButton CssClass="e-primary" @onclick="openGenerateReport" IconCss="e-icons e-download">Generate Report</SfButton>
+            <SfButton Id="createClibtn" CssClass="e-primary" @onclick="openCreateNewClient">New Client +</SfButton>
+        </div>
+    </div>
+    
+    <div class="search-container">
+        <div class="search-input">
+            <i class="fa fa-search"></i>
+            <SfTextBox @bind-Value="searchText" CssClass="e-outline search-box" Placeholder="Search clients..." Input="OnSearch"></SfTextBox>
+        </div>
+    </div>
+    
+    @if (isLoading)
+    {
+        <div class="loading-container">
+            <div class="loading-spinner"></div>
+        </div>
+    }
+    else if (filteredClients.Count == 0)
+    {
+        <div class="empty-state">
+            <i class="fa fa-users"></i>
+            <h4>No clients found</h4>
+            <p>Add your first client or try a different search term</p>
+        </div>
+    }
+    else
+    {
+        <div class="clients-grid">
+            @foreach (var client in filteredClients)
+            {
+                <div class="client-card" @onclick="() => EditClient(client)">
+                    <div class="client-header">
+                        <div class="client-avatar">
+                            @(client.Name?.Length > 0 ? client.Name[0].ToString().ToUpper() : "C")
+                        </div>
+                        <h4 class="client-name">@client.Name</h4>
+                    </div>
+                    
+                    @if (!string.IsNullOrEmpty(client.Email))
+                    {
+                        <div class="client-detail">
+                            <i class="fa fa-envelope"></i>
+                            <span>@client.Email</span>
+                        </div>
+                    }
+                    
+                    @if (!string.IsNullOrEmpty(client.Phone))
+                    {
+                        <div class="client-detail">
+                            <i class="fa fa-phone"></i>
+                            <span>@client.Phone</span>
+                        </div>
+                    }
+                    
+                    @if (!string.IsNullOrEmpty(client.City) || !string.IsNullOrEmpty(client.Country))
+                    {
+                        <div class="client-detail">
+                            <i class="fa fa-map-marker"></i>
+                            <span>@(!string.IsNullOrEmpty(client.City) ? client.City + ", " : "")@client.Country</span>
+                        </div>
+                    }
+                    
+                    <div class="client-actions">
+                        <button class="client-action-button edit" @onclick:stopPropagation="true" @onclick="() => EditClient(client)">
+                            <i class="fa fa-pencil"></i>
+                        </button>
+                        <button class="client-action-button delete" @onclick:stopPropagation="true" @onclick="() => DeleteClient(client.Id)">
+                            <i class="fa fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+    <div>
+        <SfToast ID="toast_1" @ref="ToastObj">
+            <ToastPosition X="Center"></ToastPosition>
+        </SfToast>
+    </div>
+
+<SfDialog Target="#target" Width="400px" ShowCloseIcon="true" @bind-Visible="clientDialogVisibility" IsModal="true">
+    <DialogTemplates>
+        <Header> Create Client </Header>
+        <Content>
+            <EditForm Model="ClientModel" Method="post" OnValidSubmit="CreateClient" FormName="ClientForm"
+                class="w-100 flex flex-column gap-10" style="margin-top: 5px; !important">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                <SfTextBox Placeholder="Name" CssClass="e-outline" @bind-Value="ClientModel.Name" id="ClientModel.Name"
+                    FloatLabelType="FloatLabelType.Always">
+                </SfTextBox>
+
+                <SfTextBox Placeholder="Fiscal Number" CssClass="e-outline" @bind-Value="ClientModel.FiscalNumber"
+                    id="ClientModel.FiscalNumber" FloatLabelType="FloatLabelType.Always">
+                </SfTextBox>
+
+                <SfTextBox Placeholder="Street" CssClass="e-outline" @bind-Value="ClientModel.Street"
+                    id="ClientModel.Street" FloatLabelType="FloatLabelType.Always">
+                </SfTextBox>
+
+                <SfTextBox Placeholder="Address" CssClass="e-outline" @bind-Value="ClientModel.Address"
+                    id="ClientModel.Address" FloatLabelType="FloatLabelType.Always">
+                </SfTextBox>
+
+                <SfTextBox Placeholder="Zip Code" CssClass="e-outline" @bind-Value="ClientModel.ZipCode"
+                    id="ClientModel.ZipCode" FloatLabelType="FloatLabelType.Always">
+                </SfTextBox>
+
+                <SfTextBox Placeholder="City" CssClass="e-outline" @bind-Value="ClientModel.City" id="ClientModel.City"
+                    FloatLabelType="FloatLabelType.Always">
+                </SfTextBox>
+
+                <SfTextBox Placeholder="Country" CssClass="e-outline" @bind-Value="ClientModel.Country"
+                    id="ClientModel.Country" FloatLabelType="FloatLabelType.Always">
+                </SfTextBox>
+
+                <SfTextBox Placeholder="Website" CssClass="e-outline" @bind-Value="ClientModel.Website"
+                    id="ClientModel.Website" FloatLabelType="FloatLabelType.Always">
+                </SfTextBox>
+
+                <SfTextBox Placeholder="Email" CssClass="e-outline" @bind-Value="ClientModel.Email"
+                    id="ClientModel.Email" FloatLabelType="FloatLabelType.Always">
+                </SfTextBox>
+
+                <SfTextBox Placeholder="Phone" CssClass="e-outline" @bind-Value="ClientModel.Phone"
+                    id="ClientModel.Phone" FloatLabelType="FloatLabelType.Always">
+                </SfTextBox>
+
+                <SfButton Id="submitCreateClibtn" Type="submit" CssClass="e-primary" class="w-100">@(ClientModel.Id == null ? "Create" :
+                                        "Update")
+                </SfButton>
+
+            </EditForm>        
+            </Content>
+    </DialogTemplates>
+</SfDialog>
+
+<SfDialog Target="#target" Width="400px" ShowCloseIcon="true" @bind-Visible="reportDialogVisibility" 
+          IsModal="true">
+    <DialogTemplates>
+        <Header> Generate Client Report </Header>
+        <Content>            
+            <div class="w-100 flex flex-column gap-10" style="margin-top: 5px;">
+                <SfComboBox TValue="Guid?" TItem="ClientDto" Placeholder="Select Client" 
+                           DataSource="@clients" @bind-Value="selectedClientId" CssClass="e-outline"
+                           FloatLabelType="FloatLabelType.Always">
+                    <ComboBoxFieldSettings Value="Id" Text="Name"></ComboBoxFieldSettings>
+                </SfComboBox>
+                
+                <SfDatePicker Placeholder='Start Date' CssClass="e-outline" @bind-Value="reportStartDate" 
+                              id="reportStartDate" FloatLabelType="FloatLabelType.Always">
+                </SfDatePicker>
+                
+                <SfDatePicker Placeholder='End Date' CssClass="e-outline" @bind-Value="reportEndDate"
+                              id="reportEndDate" FloatLabelType="FloatLabelType.Always">
+                </SfDatePicker>
+                
+                <SfButton CssClass="e-primary" class="w-100" @onclick="GenerateClientReport">Generate Report</SfButton>
+            </div>
+        </Content>
+    </DialogTemplates>
+</SfDialog>
+
+<script>
+    window.downloadFile = (dataUrl, fileName) => {
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+</script>
+
+
+@code {
+    SfToast ToastObj;
+    private ClientModel ClientModel = new ClientModel();
+    private string userId;
+    private bool clientDialogVisibility = false;
+    private bool reportDialogVisibility = false;
+    private List<ClientDto> clients = new List<ClientDto>();
+    private List<ClientDto> filteredClients = new List<ClientDto>();
+    private string searchText = "";
+    private bool isLoading = true;
+    
+    private Guid? selectedClientId;
+    private DateTime reportStartDate = DateTime.Now.AddDays(-30);
+    private DateTime reportEndDate = DateTime.Now;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await GetSessionUserId();
+        await LoadClients();
+        isLoading = false;
+    }
+
+    private async Task GetSessionUserId()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            userId = user.FindFirst(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+        }
+    }
+
+    private async Task LoadClients()
+    {
+        isLoading = true;
+        clients = await ClientsService.GetAllByApplicationUserIdAsync(userId);
+        
+        Console.WriteLine($"Loaded {clients.Count} clients for user {userId}");
+        
+        if (clients == null || clients.Count == 0)
+        {
+            Console.WriteLine("No clients found for user, trying to load all clients");
+            clients = await ClientsService.GetAllAsync();
+        }
+        
+        ApplyFilter();
+        isLoading = false;
+        
+        StateHasChanged();
+    }
+
+    private void openCreateNewClient()
+    {
+        ClientModel = new ClientModel();
+        ClientModel.ApplicationUserId = userId;  
+        clientDialogVisibility = true;
+    }
+
+    private async Task CreateClient()
+    {
+        if (ClientModel.Id == null)
+        {
+            var response = await ClientsService.CreateAsync(ClientModel);
+            if (response != null)
+            {
+                await UtilsService.ShowSuccessToast(ToastObj, "Client created successfully");
+            }
+            else
+            {
+                await UtilsService.ShowErrorToast(ToastObj, "Error creating client");
+            }
+        }
+        else
+        {
+            var response = await ClientsService.UpdateAsync(ClientModel.Id.Value, ClientModel);
+            if (response != null)
+            {
+                await UtilsService.ShowSuccessToast(ToastObj, "Client updated successfully");
+            }
+            else
+            {
+                await UtilsService.ShowErrorToast(ToastObj, "Error updating client");
+            }
+        }
+
+        await LoadClients();
+        clientDialogVisibility = false;
+    }
+
+    private void RecordClickHandler(RecordClickEventArgs<ClientDto> args)
+    {
+        EditClient(args.RowData);
+    }
+    
+    private void EditClient(ClientDto client)
+    {
+        ClientModel.Id = client.Id;
+        ClientModel.Name = client.Name;
+        ClientModel.FiscalNumber = client.FiscalNumber;
+        ClientModel.Street = client.Street;
+        ClientModel.Address = client.Address;
+        ClientModel.ZipCode = client.ZipCode;
+        ClientModel.City = client.City;
+        ClientModel.Country = client.Country;
+        ClientModel.Website = client.Website;
+        ClientModel.Email = client.Email;
+        ClientModel.Phone = client.Phone;
+        clientDialogVisibility = true;
+    }
+      private async Task DeleteClient(Guid clientId)
+    {
+        try
+        {
+            await ClientsService.DeleteAsync(clientId);
+            await UtilsService.ShowSuccessToast(ToastObj, "Client deleted successfully");
+            await LoadClients();
+        }
+        catch (Exception)
+        {
+            await UtilsService.ShowErrorToast(ToastObj, "Error deleting client");
+        }
+    }
+    
+    private void OnSearch(InputEventArgs args)
+    {
+        ApplyFilter();
+    }
+    
+    private void ApplyFilter()
+    {
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            filteredClients = clients.ToList();
+        }
+        else
+        {
+            filteredClients = clients
+                .Where(c => 
+                    (c.Name?.Contains(searchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (c.Email?.Contains(searchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (c.Phone?.Contains(searchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (c.City?.Contains(searchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (c.Country?.Contains(searchText, StringComparison.OrdinalIgnoreCase) ?? false))                .ToList();
+        }
+    }    private void openGenerateReport()
+    {
+        selectedClientId = null;
+        reportStartDate = DateTime.Now.AddDays(-30);
+        reportEndDate = DateTime.Now;
+        this.reportDialogVisibility = true;
+    }
+
+    private async Task GenerateClientReport()
+    {
+        try
+        {
+            if (!selectedClientId.HasValue)
+            {
+                await UtilsService.ShowErrorToast(ToastObj, "Please select a client");
+                return;
+            }
+
+            if (reportStartDate > reportEndDate)
+            {
+                await UtilsService.ShowErrorToast(ToastObj, "Start date must be before end date");
+                return;
+            }
+
+            var pdfStream = await ReportService.GenerateClientReportPdfAsync(selectedClientId.Value, reportStartDate, reportEndDate);
+            
+            if (pdfStream != null)
+            {
+                var selectedClient = clients.FirstOrDefault(c => c.Id == selectedClientId.Value);
+                var clientName = selectedClient?.Name ?? "Client";
+                var fileName = $"{clientName}_Report_{reportStartDate:yyyy-MM-dd}_to_{reportEndDate:yyyy-MM-dd}.pdf";
+                
+                var bytes = pdfStream.ToArray();
+                
+                var base64 = Convert.ToBase64String(bytes);
+                var dataUrl = $"data:application/pdf;base64,{base64}";
+                
+                await JSRuntime.InvokeVoidAsync("downloadFile", dataUrl, fileName);
+                
+                await UtilsService.ShowSuccessToast(ToastObj, "Client report PDF downloaded successfully!");
+                this.reportDialogVisibility = false;
+            }
+            else
+            {
+                await UtilsService.ShowErrorToast(ToastObj, "Failed to generate client report PDF - no data found for the selected date range");
+            }
+        }
+        catch (Exception ex)
+        {
+            await UtilsService.ShowErrorToast(ToastObj, $"Error generating client report: {ex.Message}");
+        }
+    }
+}

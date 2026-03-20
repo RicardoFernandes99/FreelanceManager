@@ -1,0 +1,332 @@
+﻿@inject IProjectsService ProjectsService
+@inject ITarefasService TarefasService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IUtilsService UtilsService
+@inject SfDialogService DialogService
+@inject ITimesheetService TimesheetService
+@inject IClientsService ClientsService
+
+@page "/home"
+@using System.Globalization
+@using System.Security.Claims
+@using FreelanceManager.Data.Enum
+@using FreelanceManager.IO.Projects
+@using FreelanceManager.IO.Tarefas
+@using FreelanceManager.IO.Clients
+@using FreelanceManager.Services.Projects
+@using FreelanceManager.Services.Tarefas
+@using FreelanceManager.Services.Clients
+@using Microsoft.AspNetCore.Authorization
+@using Syncfusion.Blazor
+@using Syncfusion.Blazor.ProgressBar
+@using Syncfusion.Blazor.Notifications
+@using Syncfusion.Blazor.Popups
+@using FreelanceManager.Services.Utils
+
+@rendermode InteractiveServer
+@attribute [Authorize]
+
+
+<PageTitle>FreelanceManager - Painel</PageTitle>
+
+<div class="dashboard-container">
+    <div class="welcome-card">
+        <div class="welcome-content">
+            <div class="welcome-text">
+                <h1>Welcome back, @nome!</h1>
+            </div>
+            <div class="date-display">
+                <div class="current-date">@DateTime.Now.ToString("dddd, d 'de' MMMM 'de' yyyy", new CultureInfo("pt-PT"))</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="stats-container">
+        <div class="stat-card active-projects">
+            <div class="stat-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+            </div>
+            <div class="stat-details">
+                <div class="stat-title">Active Projects</div>
+                <div class="stat-value">@activeProjects</div>
+            </div>
+        </div>
+
+        <div class="stat-card hours-tracked">
+            <div class="stat-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            </div>
+            <div class="stat-details">
+                <div class="stat-title">Hours Worked this Month</div>
+                <div class="stat-value">@hoursTracked</div>
+            </div>
+        </div>        <div class="stat-card invoices">
+            <div class="stat-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><path d="M20 8v6"></path><path d="M23 11h-6"></path></svg>
+            </div>
+            <div class="stat-details">
+                <div class="stat-title">Total Clients</div>
+                <div class="stat-value">@clientCount</div>
+            </div>
+        </div>
+
+        <div class="stat-card earnings">
+            <div class="stat-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+            </div>            <div class="stat-details">
+                <div class="stat-title">Monthly Earnings</div>
+                <div class="stat-value">@totalEarnings.ToString("C", new CultureInfo("pt-PT"))</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-panels">
+        <div class="left-panels">
+            <div class="side-section tasks-section">
+                <div class="section-header">
+                    <h2>Tasks in progress</h2>
+  
+                </div>
+                <div class="task-list">
+                    @if (inProgressTasks.Count > 0)
+                    {
+                        @foreach (var task in inProgressTasks)
+                        {
+                            <div class="task-item">
+                                <div class="task-content">
+                                    <div class="task-title">@task.Name</div>
+                                </div>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="no-invites">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                            </svg>
+                            <p>No Tasks in Progress</p>
+                        </div>
+                    }
+                </div>
+                <div class="view-all-container">
+                    <a href="projects" class="view-all-link">View all tasks</a>
+                </div>
+            </div>
+
+            <div class="projects-section">
+                <div class="section-header">
+                    <h2>Active Projects</h2>
+                </div>
+                @if (projects.Count > 0)
+                {
+                    <div class="projects-grid">
+                        @foreach (var project in projects)
+                        {
+                            <div class="project-card">
+                                <div class="project-header">
+                                    <div class="project-avatar" style="background-color:#735EAB ">
+                                        @project.Name.Substring(0, 1)
+                                    </div>
+                                    <div class="project-main">
+                                        <div class="project-name">@project.Name</div>
+                                        <div class="project-client">@(project.Client?.Name ?? "No Client")</div>                                
+                                    </div>
+                                </div>
+                                <div class="project-progress">
+                                    <div class="progress-info">
+                                        <span>@GetProjectProgress(project)%</span>
+                                    </div>
+                                    
+                                    <SfProgressBar Type="ProgressType.Linear" Value="GetProjectProgress(project)" Height="10" Width="99%" TrackColor="#e8e3f3"
+                                                    InnerRadius="100%" ProgressColor="#735EAB" TrackThickness="24" CornerRadius="CornerType.Round"
+                                                   ProgressThickness="18" Minimum="0" Maximum="100">
+                                    </SfProgressBar>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="no-invites">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                        <p>No Projects in Progress</p>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="right-panels">
+            <!-- Project Invites Card -->
+            <div class="side-section invites-section">
+                <div class="section-header">
+                    <h2>Project Invites</h2>
+                    <span class="invite-count">@_projectInvites.Count</span>
+                </div>
+                <div class="invites-list">
+                    @foreach (var invite in _projectInvites)
+                    {
+                        <div class="invite-item">
+                            <div class="invite-avatar" style="background-color: #735EAB">
+                                @invite.Project.Name.Substring(0, 1)
+                            </div>
+                            <div class="invite-content">
+                                <div class="invite-title">@invite.Project.Name</div>
+                                <div class="invite-from">From: @invite.SenderApplicationUser.FullName</div>
+                            </div>
+                            <div class="invite-actions">
+                                <button class="accept-btn" @onclick="() => HandleInvite(invite.Id, true)" title="Aceitar">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                </button>
+                                <button class="reject-btn" @onclick="() => HandleInvite(invite.Id, false)" title="Recusar">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                </button>
+                            </div>
+                        </div>
+                    }
+                    @if (_projectInvites.Count == 0)
+                    {
+                        <div class="no-invites">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                <line x1="16" y1="2" x2="16" y2="6"></line>
+                                <line x1="8" y1="2" x2="8" y2="6"></line>
+                                <line x1="3" y1="10" x2="21" y2="10"></line>
+                            </svg>
+                            <p>No Pending Invites</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+           
+
+<SfToast ID="HomePageId" @ref="ToastObj">
+    <ToastPosition X="Center"></ToastPosition>
+</SfToast>
+
+@code {
+    private SfToast ToastObj;
+    private string userId;
+    private string nome;    
+    private List<ProjectDto> projects = new List<ProjectDto>();
+    private List<TarefaDto> inProgressTasks = new List<TarefaDto>();
+    private List<ProjectInviteDto> _projectInvites = new();
+    private List<TimesheetDto> _userTimeSheet = new List<TimesheetDto>();
+    private List<ClientDto> _userClients = new List<ClientDto>();
+    protected override async Task OnInitializedAsync()
+    {
+        await GetSessionUserId();        
+        await GetUserProjects();
+        await GetInProgressTasks();
+        await LoadProjectInvites();
+        await GetUserTimeSheet();
+        await GetUserClients();
+        UpdateDashboardStats();
+    }
+    
+    public async Task GetSessionUserId()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        userId = user.FindFirst(ClaimTypes.NameIdentifier).Value;
+        nome = user.FindFirst(ClaimTypes.Name).Value;
+    }
+      private async Task GetUserTimeSheet()
+    {
+        _userTimeSheet = await TimesheetService.GetByUserIdAsync(userId);
+    }
+    
+    private async Task GetUserClients()
+    {
+        _userClients = await ClientsService.GetAllByApplicationUserIdAsync(userId);
+    }
+    private async Task GetUserProjects()
+    {
+        projects = await ProjectsService.GetByUserIdAsync(userId);
+    }
+
+    private async Task GetInProgressTasks()
+    {
+        var allTasks = await TarefasService.GetPersonalByApplicationUserIdAsync(userId);
+        
+        inProgressTasks = allTasks.Where(t => t.Status == TarefaStatus.InProgress).ToList();
+    }    private void UpdateDashboardStats()
+    {
+        activeProjects = projects.Count(p => p.Status == ProjectStatus.InProgress);
+        
+        var currentMonthValue = DateTime.Now.Month;
+        var currentYearValue = DateTime.Now.Year;        
+        var currentMonthTimesheets = _userTimeSheet?.Where(ts => ts.Date.Month == currentMonthValue && ts.Date.Year == currentYearValue) ?? new List<TimesheetDto>();
+          if (currentMonthTimesheets.Any())
+        {
+            hoursTracked = (int)currentMonthTimesheets.Sum(ts => ts.HoursWorked);
+            
+
+            
+            var monthlyEarnings = currentMonthTimesheets
+                .Where(ts => ts.HourlyRate > 0)
+                .Sum(ts => (decimal)ts.HoursWorked * ts.HourlyRate);
+            
+            totalEarnings = monthlyEarnings;
+        }
+        else
+        {
+            hoursTracked = 0;
+            totalEarnings = 0m;
+        }
+        
+        clientCount = _userClients?.Count ?? 0;
+    }
+
+    private async Task LoadProjectInvites()
+    {
+        var allInvites = await ProjectsService.GetProjectInvitesByUserIdAsync(userId);
+        _projectInvites = allInvites.Where(i => i.Status == ProjectInviteStatus.Pending).ToList();
+    }    
+    private int activeProjects = 0;
+    private int hoursTracked ;
+    private int clientCount = 0;
+    private decimal totalEarnings = 0m;
+
+   
+    private async Task HandleInvite(Guid inviteId, bool accept)
+    {
+        var invite = _projectInvites.FirstOrDefault(i => i.Id == inviteId);
+        if (invite != null)
+        {
+            var model = new ProjectInviteModel
+            {
+                ProjectId = invite.ProjectId,
+                InvitedApplicationUserId = invite.InvitedApplicationUserId,
+                SenderApplicationUserId = invite.SenderApplicationUserId,
+                Status = accept ? ProjectInviteStatus.Accepted : ProjectInviteStatus.Rejected
+            };
+
+            await ProjectsService.UpdateProjectInviteAsync(inviteId, model);
+            await LoadProjectInvites();
+            await UtilsService.ShowSuccessToast(ToastObj, accept ? "Invitation accepted" : "Invitation rejected");
+        }
+    }
+
+
+    private int GetProjectProgress(ProjectDto project)
+    {
+        if (project?.Tarefas == null || !project.Tarefas.Any())
+        {
+            return 0;
+        }
+    
+        int totalTasks = project.Tarefas.Count();
+        int completedTasks = project.Tarefas.Count(t => t.Status == TarefaStatus.Completed);
+        return (int)Math.Round((double)completedTasks / totalTasks * 100);
+    }
+}
+

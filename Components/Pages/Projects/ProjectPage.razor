@@ -1,0 +1,826 @@
+﻿@page "/ProjectPage"
+
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IProjectsService ProjectsService
+@inject ITarefasService TarefasService
+@inject ITimesheetService TimesheetService
+@inject IUtilsService UtilsService
+@inject UserManager<ApplicationUser> UserManager
+@inject SfDialogService DialogService
+@inject NavigationManager Navigation
+
+@using System.Security.Claims
+@using FreelanceManager.Data.Enum
+@using FreelanceManager.IO.Projects
+@using FreelanceManager.IO.Tarefas
+@using FreelanceManager.Services.Projects
+@using FreelanceManager.Services.Utils
+@using FreelanceManager.Services.Tarefas
+@using Microsoft.AspNetCore.Authorization
+@using Syncfusion.Blazor.Popups
+@using Syncfusion.Blazor.DropDowns
+@using Syncfusion.Blazor.Kanban
+@using Microsoft.AspNetCore.Identity
+@using FreelanceManager.Data
+@using Microsoft.EntityFrameworkCore
+@using System.Globalization
+
+@rendermode InteractiveServer
+@attribute [Authorize]
+
+<PageTitle>ProjectPage</PageTitle>
+
+<div class="flex flex-column gap-10 mb-16">
+
+    <div class="flex justify-content-space-between align-items-center">
+        <div class="flex gap-10 align-items-center">
+            <div class="fs-24 fb-bold">@_project?.Name</div>
+            <div class="statusBadge @(GetStatusClass(_project.Status).bgColorOpacity)">
+                <div class="@(GetStatusClass(_project.Status).textColor)">
+                    @_project.Status
+                </div>
+            </div>
+        </div>
+        <div class="flex gap-10">
+            <SfButton Id="Filltimesheetbtn" CssClass="e-primary" @onclick="openTimesheetDialog">Fill Timesheet</SfButton>
+            @if (isOwner)
+            {
+                <SfButton CssClass="e-primary" @onclick="openInviteDialog">Invite User</SfButton>
+                <SfButton Id="newProjectTaskBtn" CssClass="e-primary" @onclick="openCreateNewTask">New Task +</SfButton>
+                <SfButton Id="adminSettingsBtn" CssClass="e-primary" @onclick="NavigateToAdminPage">Admin Settings</SfButton>
+            }
+        </div>
+    </div>
+
+    <div class="flex flex-column">
+        <div class="fs-16">
+            <span class="fb-bold">Client: </span>@(_project.ClientId == null ? "N/A" : _project.Client?.Name)
+        </div>
+        <div class="fs-16">
+            <span class="fb-bold">Description: </span>@_project?.Description
+        </div>
+    </div>
+
+    <div class="flex flex-column gap-10">
+        <div class="flex gap-10 align-items-center">
+            <div class="fs-24 fb-bold">Members</div>
+            <div class="countStyle bg-color-purple color-white fs-14">
+                @_project.ProjectUsers.Count
+            </div>
+        </div>
+        <div class="flex flex-wrap gap-10">
+            @if (_project.ProjectUsers != null)
+            {
+                foreach (var projectUser in _project.ProjectUsers)
+                {
+                    <div class="puBadge">
+                        <span>@projectUser.ApplicationUser.FullName</span>
+                        @if (isOwner && projectUser.ApplicationUserId != userId)
+                        {
+                            <button class="remove-member-btn"
+                                    @onclick="() => RemoveMember(projectUser.ApplicationUserId)"
+                                    @onclick:stopPropagation>
+                                <i class="fa fa-times"></i>
+                            </button>
+                        }
+                    </div>
+                }
+            }
+        </div>
+    </div>
+</div>
+
+<SfKanban @ref="KanbanObj"
+          TValue="TarefaDto"
+          KeyField="StatusDescription"
+          DataSource="_tarefas"
+          AllowDragAndDrop="true">
+    <KanbanColumns>
+        <KanbanColumn HeaderText="To Do"       KeyField="@(new List<string>() { "Created" })" />
+        <KanbanColumn HeaderText="In Progress" KeyField="@(new List<string>() { "InProgress" })" />
+        <KanbanColumn HeaderText="On Hold"     KeyField="@(new List<string>() { "OnHold" })" />
+        <KanbanColumn HeaderText="Completed"   KeyField="@(new List<string>() { "Completed" })" />
+    </KanbanColumns>
+
+    <KanbanCardSettings HeaderField="Name" ContentField="Description">
+        <Template>
+            @{
+                var data = (context as TarefaDto);
+                var statusText = data.Status.ToString();
+                var statusClass = GetStatusClass(statusText);
+            }
+            <div class="custom-kanban-card status-@statusText">
+                <div class="status-indicator @statusClass.bgColor"></div>
+                <div class="card-title">@data.Name</div>
+                <div class="card-desc">@data.Description</div>
+                @if (!string.IsNullOrEmpty(data.Notes))
+                {
+                    <div class="card-notes">@data.Notes</div>
+                }
+                <div class="card-footer">
+                    <span class="hourly-rate">
+                        @(data.HourlyRate.HasValue ? $"€{data.HourlyRate:F2}/h" : "")
+                    </span>
+                </div>
+                @if (isOwner)
+                {
+                    <div class="task-delete-actions">
+                        <button class="task-delete-button"
+                                @onclick="() => DeleteTask(data.Id)"
+                                @onclick:stopPropagation="true">
+                            <i class="fa fa-trash"></i>
+                        </button>
+                    </div>
+                }
+            </div>
+        </Template>
+    </KanbanCardSettings>
+
+    <KanbanSwimlaneSettings KeyField="AssociatedUserId"
+                            TextField="AssociatedUser.FullName"
+                            AllowDragAndDrop="@_allowDragAndDrop"
+                            ShowEmptyRow="true">
+    </KanbanSwimlaneSettings>
+
+    <KanbanEvents TValue="TarefaDto"
+                  CardClick="@CardClickHandler"
+                  DialogOpen="@OnDialogOpen"
+                  ActionComplete="OnKanbanActionComplete"
+                  DragStart="@DragStartHandler">
+    </KanbanEvents>
+</SfKanban>
+
+<SfDialog Target="#target"
+          Width="400px"
+          ShowCloseIcon="true"
+          @bind-Visible="Visibility"
+          IsModal="true">
+    <DialogTemplates>
+        <Header> Create Task </Header>
+        <Content>
+            <EditForm Model="TarefaModel"
+                      method="post"
+                      OnValidSubmit="CreateTarefa"
+                      FormName="TarefaForm"
+                      class="w-100 flex flex-column gap-10"
+                      style="margin-top: 5px; !important">
+                <DataAnnotationsValidator />
+                <SfTextBox Placeholder="Name"
+                           CssClass="e-outline"
+                           @bind-Value="TarefaModel.Name"
+                           id="TarefaModel.Name"
+                           FloatLabelType="FloatLabelType.Always" />
+                <SfTextBox Placeholder="Description"
+                           Type="InputType.Text"
+                           CssClass="e-outline"
+                           FloatLabelType="FloatLabelType.Always"
+                           @bind-Value="TarefaModel.Description"
+                           id="TarefaModel.Description" />
+                <SfComboBox TValue="string"
+                            TItem="ProjectUserDto"
+                            Placeholder="Associate To"
+                            CssClass="e-outline"
+                            FloatLabelType="FloatLabelType.Always"
+                            DataSource="@_project.ProjectUsers"
+                            @bind-Value="TarefaModel.AssociatedUserId">
+                    <ComboBoxFieldSettings Value="ApplicationUserId"
+                                           Text="ApplicationUserName" />
+                </SfComboBox>
+                <SfTextBox Placeholder="Notes"
+                           Type="InputType.Text"
+                           CssClass="e-outline"
+                           FloatLabelType="FloatLabelType.Always"
+                           @bind-Value="TarefaModel.Notes"
+                           id="TarefaModel.Notes" />
+                <SfNumericTextBox CssClass="e-outline"
+                                  Format="c2"
+                                  Min="0"
+                                  Placeholder="Hourly Rate"
+                                  Decimals="2"
+                                  ValidateDecimalOnType="true"
+                                  FloatLabelType="FloatLabelType.Always"
+                                  @bind-Value="TarefaModel.HourlyRate"
+                                  id="TarefaModel.HourlyRate" />
+                <SfButton Id="submitTask" Type="submit"
+                          CssClass="e-primary"
+                          class="w-100">
+                    @(TarefaModel.Id == null ? "Create" : "Update")
+                </SfButton>
+            </EditForm>
+        </Content>
+    </DialogTemplates>
+</SfDialog>
+
+<SfDialog Target="#target"
+          Width="400px"
+          ShowCloseIcon="true"
+          @bind-Visible="InviteDialogVisibility"
+          IsModal="true">
+    <DialogTemplates>
+        <Header>Invite User</Header>
+        <Content>
+            <div class="w-100 flex flex-column gap-10" style="margin-top: 5px;">
+                <SfComboBox TValue="string"
+                            TItem="ApplicationUser"
+                            Placeholder="Select User"
+                            CssClass="e-outline"
+                            FloatLabelType="FloatLabelType.Always"
+                            DataSource="@_availableUsers"
+                            @bind-Value="@selectedUserId">
+                    <ComboBoxFieldSettings Value="Id"
+                                           Text="FullName" />
+                </SfComboBox>
+                <SfButton CssClass="e-primary" @onclick="InviteUser">Invite</SfButton>
+            </div>
+        </Content>
+    </DialogTemplates>
+</SfDialog>
+
+<SfDialog Target="#target"
+          Width="500px"
+          ShowCloseIcon="true"
+          @bind-Visible="TimesheetDialogVisibility"
+          IsModal="true">
+    <DialogTemplates>
+        <Header>
+            Log Time Entry - @DateTime.Today.ToString("MMMM dd, yyyy", new CultureInfo("en-US"))
+        </Header>
+        <Content>
+            <div class="w-100 flex flex-column gap-15" style="margin-top: 10px;">
+                <div class="flex flex-column gap-10">
+                    <SfComboBox TValue="Guid?"
+                                TItem="TarefaDto"
+                                Placeholder="Select Task"
+                                CssClass="e-outline"
+                                DataSource="@_userTasks"
+                                @bind-Value="selectedTaskId"
+                                FloatLabelType="FloatLabelType.Always">
+                        <ComboBoxFieldSettings Value="Id"
+                                               Text="Name" />
+                    </SfComboBox>
+                    <SfTextBox @bind-Value="workedHours"
+                              Placeholder="Hours Worked (e.g., 2.5)"
+                              CssClass="e-outline"
+                              FloatLabelType="FloatLabelType.Always" 
+                              ID="workedHours"/>
+                    <SfTextBox @bind-Value="timesheetNotes"
+                              Placeholder="Notes (optional)"
+                              CssClass="e-outline"
+                              FloatLabelType="FloatLabelType.Always"
+                              Multiline="true"
+                              RowCount="3" 
+                              ID="timesheetnotes"/>
+                </div>
+                <div class="flex gap-10" style="margin-top: 10px;">
+                    <SfButton Id="submitTimesheet" CssClass="e-primary w-50" @onclick="SaveTimesheetEntry">Save Entry</SfButton>
+                    <SfButton CssClass="e-outline w-50" @onclick="CloseTimesheetDialog">Cancel</SfButton>
+                </div>
+            </div>
+        </Content>
+    </DialogTemplates>
+</SfDialog>
+
+<div>
+    <SfToast ID="ProjectPageId" @ref="ToastObj">
+        <ToastPosition X="Center"></ToastPosition>
+    </SfToast>
+</div>
+
+<SfDialogProvider />
+
+@code {
+    SfToast ToastObj;
+    SfKanban<TarefaDto> KanbanObj;
+    private bool _allowDragAndDrop;
+    private List<TarefaDto> _tarefas = new List<TarefaDto>();
+    private string userId;
+    private bool isOwner;
+    private string OldAssociatedUserId;
+
+    private List<ApplicationUser> _availableUsers = new();
+    [SupplyParameterFromQuery]
+    private Guid ProjectId { get; set; }
+    private bool _isInitialized = false;
+    private ProjectDto _project = new ProjectDto();
+    private TarefaModel TarefaModel { get; set; } = new();
+    private bool createTarefaView = false;
+    private bool InviteDialogVisibility { get; set; } = false;
+    private string selectedUserId;
+    private bool TimesheetDialogVisibility { get; set; } = false;
+    private Guid? selectedTaskId;
+    private string workedHours = "";
+    private string timesheetNotes = "";
+    private List<TarefaDto> _userTasks = new List<TarefaDto>();
+
+    private async Task getUsers()
+    {
+        _availableUsers = await UserManager.Users.ToListAsync();
+        _availableUsers.RemoveAll(user => user.Id == userId);
+    }
+
+    public class colorResult
+    {
+        public string bgColor { get; set; }
+        public string textColor { get; set; }
+        public string bgColorOpacity { get; set; }
+    }
+
+    private bool Visibility { get; set; } = false;
+
+    protected override Task OnInitializedAsync() => Task.CompletedTask;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_isInitialized)
+        {
+            _isInitialized = true;
+            await GetSessionUserId();
+            await IsOwner();
+            await LoadProjectById();
+            await LoadTarefasByProjectId(ProjectId);
+            await getUsers();
+            StateHasChanged();
+        }
+    }
+
+    private void openCreateNewTask()
+    {
+        TarefaModel = new TarefaModel();
+        TarefaModel.ApplicationUserId = userId;
+        TarefaModel.AssociatedUserId = userId;
+        TarefaModel.ProjectId = ProjectId;
+        this.Visibility = true;
+    }
+
+    public async Task DragStartHandler(Syncfusion.Blazor.Kanban.DragEventArgs<TarefaDto> args)
+    {
+        var data = args.Data[0];
+        OldAssociatedUserId = data.AssociatedUserId;
+
+        if (!userId.Equals(data.AssociatedUserId) && !userId.Equals(data.ApplicationUserId))
+        {
+            args.Cancel = true;
+            await UtilsService.ShowErrorToast(ToastObj, "You can only drag your own tasks.");
+            return;
+        }
+    }
+
+    private async Task LoadProjectById()
+    {
+        _project = await ProjectsService.GetByIdAsync(ProjectId);
+        if (_project == null)
+        {
+            await UtilsService.ShowErrorToast(ToastObj, "Project not found");
+            return;
+        }
+    }
+
+    public void ToggleCreateTarefaView()
+    {
+        createTarefaView = !createTarefaView;
+        if (!createTarefaView)
+        {
+            TarefaModel = new TarefaModel();
+        }
+    }
+
+    private async Task LoadProjectUsers()
+    {
+        List<ProjectUserDto> projectUsers = await ProjectsService.GetProjectUsersAsync(ProjectId);
+        foreach (ProjectUserDto user in projectUsers)
+        {
+            TarefaDto tarefa = new TarefaDto
+            {
+                Id = Guid.NewGuid(),
+                Name = "",
+                Description = "",
+                AssociatedUserId = user.ApplicationUserId,
+                Status = TarefaStatus.Placeholder,
+                StatusDescription = TarefaStatus.Placeholder.ToString(),
+                StartDate = DateTime.Now,
+                EndDate = DateTime.Now,
+                Notes = "",
+                AssociatedUser = user.ApplicationUser,
+                ApplicationUserId = user.ApplicationUserId,
+            };
+
+            _tarefas.Add(tarefa);
+        }
+    }
+
+    public async Task CreateTarefa()
+    {
+        var res = new TarefaDto();
+        if (TarefaModel.Id != null)
+        {
+            res = await TarefasService.UpdateAsync(TarefaModel.Id.Value, TarefaModel);
+        }
+        else
+        {
+            res = await TarefasService.CreateAsync(TarefaModel);
+            await UpdateProjectStatus();
+        }
+
+        if (res != null)
+        {
+            await LoadTarefasByProjectId(ProjectId);
+            await KanbanObj.RefreshAsync();
+            TarefaModel = new TarefaModel();
+            await UtilsService.ShowSuccessToast(ToastObj, res != null ? "Task Updated Successfully" : "Task Created Successfully");
+            this.Visibility = false;
+        }
+    }
+
+    private async Task IsOwner()
+    {
+        var proj = await ProjectsService.GetByIdAsync(ProjectId);
+        if (userId.Equals(proj.ApplicationUserId))
+        {
+            this.isOwner = true;
+            _allowDragAndDrop = true;
+        }
+        else
+        {
+            this.isOwner = false;
+            _allowDragAndDrop = false;
+        }
+    }
+
+    private async Task GetSessionUserId()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        userId = user.FindFirst(ClaimTypes.NameIdentifier).Value;
+    }
+
+    private async Task LoadTarefasByProjectId(Guid projectId)
+    {
+        var res = await ProjectsService.GetTarefasAsync(projectId);
+        _tarefas = res;
+        await LoadProjectUsers();
+    }
+
+    private async Task OnKanbanActionComplete(Syncfusion.Blazor.Kanban.ActionEventArgs<TarefaDto> args)
+    {
+        if (args.RequestType == "cardChange" && args.ChangedRecords?.Any() == true)
+        {
+            var changedRecord = args.ChangedRecords.First();
+            if (changedRecord.StatusDescription == changedRecord.Status.ToString()
+                && changedRecord.AssociatedUserId == OldAssociatedUserId)
+            {
+                return;
+            }
+
+            changedRecord.Status = changedRecord.StatusDescription switch
+            {
+                "Created"    => TarefaStatus.Created,
+                "InProgress" => TarefaStatus.InProgress,
+                "OnHold"     => TarefaStatus.OnHold,
+                "Completed"  => TarefaStatus.Completed,
+                _            => changedRecord.Status
+            };
+
+            TarefaModel model = new TarefaModel
+            {
+                Id = changedRecord.Id,
+                AssociatedUserId = changedRecord.AssociatedUserId,
+                Code = changedRecord.Code,
+                Name = changedRecord.Name,
+                Description = changedRecord.Description,
+                StartDate = changedRecord.StartDate,
+                EndDate = changedRecord.EndDate,
+                Notes = changedRecord.Notes,
+                Status = changedRecord.Status,
+                ProjectId = ProjectId,
+                ApplicationUserId = changedRecord.ApplicationUserId,
+                HourlyRate = changedRecord.HourlyRate
+            };
+
+            var result = await TarefasService.UpdateAsync(changedRecord.Id, model);
+            if (result != null)
+            {
+                await UtilsService.ShowSuccessToast(ToastObj, "Task updated successfully");
+            }
+            else
+            {
+                await UtilsService.ShowErrorToast(ToastObj, "Error updating task");
+            }
+
+            await LoadTarefasByProjectId(ProjectId);
+            await UpdateProjectStatus();
+            await KanbanObj.RefreshAsync();
+        }
+    }
+
+    private colorResult GetStatusClass(ProjectStatus status)
+    {
+        switch (status)
+        {
+            case ProjectStatus.Created:
+                return new colorResult
+                {
+                    bgColor = "bg-color-created",
+                    textColor = "color-created",
+                    bgColorOpacity = "bg-color-created-opacity"
+                };
+            case ProjectStatus.Completed:
+                return new colorResult
+                {
+                    bgColor = "bg-color-completed",
+                    textColor = "color-completed",
+                    bgColorOpacity = "bg-color-completed-opacity"
+                };
+            case ProjectStatus.InProgress:
+                return new colorResult
+                {
+                    bgColor = "bg-color-inprogress",
+                    textColor = "color-inprogress",
+                    bgColorOpacity = "bg-color-inprogress-opacity"
+                };
+            case ProjectStatus.OnHold:
+                return new colorResult
+                {
+                    bgColor = "bg-color-onhold",
+                    textColor = "color-onhold",
+                    bgColorOpacity = "bg-color-onhold-opacity"
+                };
+            default:
+                return new colorResult();
+        }
+    }
+
+    private colorResult GetStatusClass(string statusStr)
+    {
+        switch (statusStr)
+        {
+            case "Created":
+                return new colorResult
+                {
+                    bgColor = "bg-color-created",
+                    textColor = "color-created",
+                    bgColorOpacity = "bg-color-created-opacity"
+                };
+            case "Completed":
+                return new colorResult
+                {
+                    bgColor = "bg-color-completed",
+                    textColor = "color-completed",
+                    bgColorOpacity = "bg-color-completed-opacity"
+                };
+            case "InProgress":
+                return new colorResult
+                {
+                    bgColor = "bg-color-inprogress",
+                    textColor = "color-inprogress",
+                    bgColorOpacity = "bg-color-inprogress-opacity"
+                };
+            case "OnHold":
+                return new colorResult
+                {
+                    bgColor = "bg-color-onhold",
+                    textColor = "color-onhold",
+                    bgColorOpacity = "bg-color-onhold-opacity"
+                };
+            default:
+                return new colorResult();
+        }
+    }
+
+    public void CardClickHandler(CardClickEventArgs<TarefaDto> args)
+    {
+        var data = args.Data;
+        if (data != null)
+        {
+            var tarefa = new TarefaModel
+            {
+                Id = data.Id,
+                Name = data.Name,
+                Description = data.Description,
+                AssociatedUserId = data.AssociatedUserId,
+                Status = data.Status,
+                StartDate = data.StartDate,
+                EndDate = data.EndDate,
+                Notes = data.Notes,
+                ApplicationUserId = data.ApplicationUserId,
+                HourlyRate = data.HourlyRate,
+                ProjectId = data.ProjectId,
+            };
+            TarefaModel = tarefa;
+            this.Visibility = true;
+        }
+    }
+
+    private void OnDialogOpen(DialogOpenEventArgs<TarefaDto> args)
+    {
+        args.Cancel = true;
+    }
+
+    private async Task DeleteTask(Guid taskId)
+    {
+        bool isConfirmed = await DialogService.ConfirmAsync(
+            "Are you sure you want to delete this task?",
+            "Delete",
+            new DialogOptions
+            {
+                PrimaryButtonOptions = new DialogButtonOptions { Content = "Delete" },
+                CancelButtonOptions = new DialogButtonOptions { Content = "Cancel" }
+            });
+
+        if (isConfirmed)
+        {
+            await TarefasService.DeleteAsync(taskId);
+            await LoadTarefasByProjectId(ProjectId);
+            await UtilsService.ShowSuccessToast(ToastObj, "Task deleted");
+            await UpdateProjectStatus();
+        }
+    }
+
+    private void openInviteDialog()
+    {
+        InviteDialogVisibility = true;
+    }
+
+    private async Task InviteUser()
+    {
+        if (string.IsNullOrEmpty(selectedUserId))
+        {
+            await UtilsService.ShowErrorToast(ToastObj, "Please select a user");
+            return;
+        }
+        ProjectInviteModel projectInviteModel = new ProjectInviteModel
+        {
+            ProjectId = ProjectId,
+            InvitedApplicationUserId = selectedUserId,
+            SenderApplicationUserId = userId
+        };
+
+        var result = await ProjectsService.CreateProjectInviteAsync(projectInviteModel);
+
+        if (result != null)
+        {
+            await LoadProjectById();
+            InviteDialogVisibility = false;
+            selectedUserId = null;
+            await UtilsService.ShowSuccessToast(ToastObj, "Invitation sent successfully");
+        }
+        else
+        {
+            await UtilsService.ShowErrorToast(ToastObj, "Failed to send invitation");
+        }
+    }
+
+    private async Task RemoveMember(string memberId)
+    {
+        bool isConfirmed = await DialogService.ConfirmAsync(
+            "Are you sure you want to remove this member?",
+            "Remove",
+            new DialogOptions
+            {
+                PrimaryButtonOptions = new DialogButtonOptions { Content = "Remove" },
+                CancelButtonOptions = new DialogButtonOptions { Content = "Cancel" }
+            });
+
+        var tarefas = await ProjectsService.GetTarefasByProjectIdAndAssociatedUserIdAsync(ProjectId, memberId);
+        if (isConfirmed)
+        {
+            if (tarefas.Count > 0)
+            {
+                await UtilsService.ShowErrorToast(ToastObj, "Member has tasks assigned.");
+                return;
+            }
+            else
+            {
+                await ProjectsService.DeleteProjectUserByUserIdAndProjectId(memberId, ProjectId);
+                await LoadTarefasByProjectId(ProjectId);
+                await UtilsService.ShowSuccessToast(ToastObj, "Member Removed");
+            }
+        }
+    }
+
+    private void openTimesheetDialog()
+    {
+        LoadUserTasks();
+        selectedTaskId = null;
+        workedHours = null;
+        timesheetNotes = "";
+        TimesheetDialogVisibility = true;
+    }
+
+    private void LoadUserTasks()
+    {
+        _userTasks = _tarefas
+            .Where(t => t.AssociatedUserId == userId && t.Status != TarefaStatus.Placeholder)
+            .ToList();
+    }
+
+    private async Task SaveTimesheetEntry()
+    {
+        if (!selectedTaskId.HasValue)
+        {
+            await UtilsService.ShowErrorToast(ToastObj, "Please select a task");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(workedHours))
+        {
+            await UtilsService.ShowErrorToast(ToastObj, "Please enter hours worked");
+            return;
+        }
+
+        if (!double.TryParse(workedHours, out double hoursValue) || hoursValue <= 0)
+        {
+            await UtilsService.ShowErrorToast(ToastObj, "Please enter valid hours worked (e.g., 2.5)");
+            return;
+        }
+
+        try
+        {
+            var timesheetModel = new TimesheetModel
+            {
+                TarefaId = selectedTaskId.Value,
+                Date = DateTime.Today,
+                Hours = workedHours,
+                Notes = timesheetNotes ?? "",
+                UserId = userId
+            };
+
+            var res = await TimesheetService.GetByProjectIdAsyncAndUserId(ProjectId, userId);
+
+
+            double totalHoursToday = 0;
+            if (res != null)
+            {
+                totalHoursToday = res
+                    .Where(t => t.Date.Date == DateTime.Today)
+                    .Sum(t =>
+                    {
+                        double.TryParse(t.Hours, out double h);
+                        return h;
+                    });
+            }
+
+            if (double.TryParse(timesheetModel.Hours, out double newEntryHours))
+            {
+                if (totalHoursToday + newEntryHours > 24)
+                {
+                    await UtilsService.ShowErrorToast(ToastObj, "Total hours logged for today cannot exceed 24.");
+                    return;
+                }
+            }
+
+            var result = await TimesheetService.CreateAsync(timesheetModel);
+            if (result != null)
+            {
+                await UtilsService.ShowSuccessToast(ToastObj, "Timesheet saved successfully");
+                CloseTimesheetDialog();
+            }
+            else
+            {
+                await UtilsService.ShowErrorToast(ToastObj, "Failed to save timesheet");
+            }
+        }
+        catch (Exception ex)
+        {
+            await UtilsService.ShowErrorToast(ToastObj, "Error saving timesheet entry: " + ex.Message);
+        }
+    }
+
+    private void CloseTimesheetDialog()
+    {
+        TimesheetDialogVisibility = false;
+        selectedTaskId = null;
+        workedHours = "";
+        timesheetNotes = "";
+    }
+
+    private async Task UpdateProjectStatus()
+    {
+        var res = _tarefas.Where(t => t.Status != TarefaStatus.Placeholder).ToList();
+
+        if (res.Count == 0 || res.All(t => t.Status == TarefaStatus.Created))
+        {
+            _project.Status = ProjectStatus.Created;
+        }
+        else if (res.All(t => t.Status == TarefaStatus.Completed))
+        {
+            _project.Status = ProjectStatus.Completed;
+        }
+        else if (res.Any(t => t.Status == TarefaStatus.InProgress))
+        {
+            _project.Status = ProjectStatus.InProgress;
+        }
+        else if (res.All(t => t.Status == TarefaStatus.OnHold))
+        {
+            _project.Status = ProjectStatus.OnHold;
+        }
+        else
+        {
+            _project.Status = ProjectStatus.InProgress;
+        }
+
+        await ProjectsService.UpdateProjectStatusAsync(_project.Id, _project.Status);
+    }    private void NavigateToAdminPage()
+    {
+        Navigation.NavigateTo($"/projects/{ProjectId}/admin");
+    }
+}

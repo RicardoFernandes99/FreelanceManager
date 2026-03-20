@@ -1,0 +1,164 @@
+﻿@page "/Account/Register"
+@layout FreelanceManager.Components.Layout.LoginLayout
+
+@using System.ComponentModel.DataAnnotations
+@using System.Text
+@using System.Text.Encodings.Web
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.WebUtilities
+@using FreelanceManager.Data
+@using Syncfusion.Blazor.Notifications
+
+@inject UserManager<ApplicationUser> UserManager
+@inject IUserStore<ApplicationUser> UserStore
+@inject SignInManager<ApplicationUser> SignInManager
+@inject IEmailSender<ApplicationUser> EmailSender
+@inject ILogger<Register> Logger
+@inject NavigationManager NavigationManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Register</PageTitle>
+<div class="bg-color-black flex justify-content-center align-items-center w-100 h100vh">
+    <div class="signinup-card">
+        <div class=" text-center mb-16">
+            <img src="assets/logo.png" alt="logo freelance manager" class="w-100  border-radius-5" />
+        </div>
+        <div class="fs-18 fb-bold color-darkgrey text-center mb-16">Register new account!</div>
+        <StatusMessage Message="@Message" />
+        <StatusMessage Message="@statusMessage" />
+        <EditForm Model="Input" asp-route-returnUrl="@ReturnUrl" method="post" OnValidSubmit="RegisterUser" FormName="register"
+            class="w-100 flex flex-column gap-10">
+            <DataAnnotationsValidator />
+            <SfTextBox Placeholder='Username' CssClass="e-outline" @bind-Value="Input.Username" id="Input.Username"
+                       FloatLabelType="FloatLabelType.Always">
+            </SfTextBox>
+            <SfTextBox Placeholder='Fullname' CssClass="e-outline" @bind-Value="Input.Fullname" id="Input.fullname"
+                       FloatLabelType="FloatLabelType.Always">
+            </SfTextBox>
+            <SfTextBox Placeholder='Email' CssClass="e-outline" @bind-Value="Input.Email" id="Input.Email"
+                       FloatLabelType="FloatLabelType.Always">
+            </SfTextBox>
+            <SfTextBox Placeholder='Daily Work Hours' CssClass="e-outline" @bind-Value="Input.DailyHours" id="Input.dailyhours"
+                       FloatLabelType="FloatLabelType.Always">
+            </SfTextBox>
+            <ValidationMessage For="@(() => Input.DailyHours)" class="text-danger" />
+            <SfTextBox Placeholder='Password' Type="InputType.Password" CssClass="e-outline"
+                FloatLabelType="FloatLabelType.Always" @bind-Value="Input.Password" id="Input.Password">
+            </SfTextBox>
+            <SfTextBox Placeholder='Confirm Password' Type="InputType.Password" CssClass="e-outline"
+                FloatLabelType="FloatLabelType.Always" @bind-Value="Input.ConfirmPassword" id="Input.ConfirmPassword">
+            </SfTextBox>
+            <SfButton Type="submit" CssClass="e-primary" class="w-100">Sign Up</SfButton>
+        </EditForm>
+        <div class="fs-14 mt-16 text-center">
+           Already have an account? <a class="color-purple fb-bold text-decoration-none"
+                href="@(NavigationManager.GetUriWithQueryParameters("Account/Login", new Dictionary<string, object> { ["ReturnUrl"] = ReturnUrl }))">SignIn</a>
+        </div>
+    </div>
+</div>
+
+@code {
+    private IEnumerable<IdentityError> identityErrors;
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    [SupplyParameterFromQuery]
+    private string ReturnUrl { get; set; }
+    private string statusMessage;
+    private string Message => identityErrors is null ? null : $"Error: {string.Join(", ", identityErrors.Select(error => error.Description))}";
+
+
+    public async Task RegisterUser(EditContext editContext)
+    {
+        var user = new ApplicationUser
+        {
+            UserName = Input.Username,
+            Email = Input.Email,
+            FullName = Input.Fullname,
+            DailyHours = Input.DailyHours,
+            EmailConfirmed = true,
+            CreatedAt = DateTime.Now,
+            CreatedBy = Input.Username,
+            LockoutEnabled = false
+        };
+
+        await UserStore.SetUserNameAsync(user, Input.Username, CancellationToken.None);
+        var emailStore = GetEmailStore();
+        await emailStore.SetEmailAsync(user, Input.Email, CancellationToken.None);
+        var result = await UserManager.CreateAsync(user, Input.Password);
+
+        if (!result.Succeeded)
+        {
+            identityErrors = result.Errors;
+            return;
+        }
+
+        Logger.LogInformation("User created a new account with password.");
+        statusMessage = "Account created successfully.";
+        
+        var code = await UserManager.GenerateEmailConfirmationTokenAsync(user);
+       
+       var confRes = await UserManager.ConfirmEmailAsync(user, code);
+
+        await SignInManager.SignInAsync(user, isPersistent: false);
+        RedirectManager.RedirectTo(ReturnUrl);
+    }
+
+    private ApplicationUser CreateUser()
+    {
+        try
+        {
+            return Activator.CreateInstance<ApplicationUser>();
+        }
+        catch
+        {
+            throw new InvalidOperationException($"Can't create an instance of '{nameof(ApplicationUser)}'. " +
+                $"Ensure that '{nameof(ApplicationUser)}' is not an abstract class and has a parameterless constructor.");
+        }
+    }
+
+    private IUserEmailStore<ApplicationUser> GetEmailStore()
+    {
+        if (!UserManager.SupportsUserEmail)
+        {
+            throw new NotSupportedException("The default UI requires a user store with email support.");
+        }
+        return (IUserEmailStore<ApplicationUser>)UserStore;
+    }
+
+    private sealed class InputModel
+    {
+
+        [Required]
+        [RegularExpression("^[a-zA-Z0-9!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>?]+$", ErrorMessage = "The username can contain letters, numbers, and special characters, but not slashes.")]
+        [Display(Name = "Username")]
+        public string Username { get; set; } = "";
+                
+        [Required]
+        [EmailAddress]
+        [Display(Name = "Email")]
+        public string Email { get; set; } = "";
+        
+        [Required]
+        [Display(Name = "Fullname")]
+        public string Fullname { get; set; } = "";
+        
+        [Required]
+        [Display(Name = "Daily Hours")]
+        [RegularExpression(@"^([0-9]|1[0-9]|2[0-4])$", ErrorMessage = "Daily hours must be between 0 and 24")]
+        public string DailyHours { get; set; } = "";
+        
+        [Required]
+        [StringLength(100, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 6)]
+        [DataType(DataType.Password)]
+        [Display(Name = "Password")]
+        public string Password { get; set; } = "";
+
+        [DataType(DataType.Password)]
+        [Display(Name = "Confirm password")]
+        [Compare("Password", ErrorMessage = "The password and confirmation password do not match.")]
+        public string ConfirmPassword { get; set; } = "";
+    }
+}

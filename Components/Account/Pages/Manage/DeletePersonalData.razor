@@ -1,0 +1,90 @@
+@page "/Account/Manage/DeletePersonalData"
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using FreelanceManager.Data
+
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject IdentityUserAccessor UserAccessor
+@inject IdentityRedirectManager RedirectManager
+@inject ILogger<DeletePersonalData> Logger
+
+<PageTitle>Delete Personal Data</PageTitle>
+
+<h4 class="mb-4">Delete Personal Data</h4>
+<StatusMessage Message="@message" />
+<div class="row">
+    <div class="col-xl-6">
+<div class="alert alert-warning" role="alert">
+    <p>
+        <strong>Deleting your account is permanent and cannot be undone.</strong>
+    </p>
+</div>
+
+<div >
+    <div >
+        <EditForm Model="Input" FormName="delete-user" OnValidSubmit="OnValidSubmitAsync" method="post">
+            <DataAnnotationsValidator />
+            <ValidationSummary class="text-danger" role="alert" />
+            @if (requirePassword)
+            {
+                <div class="form-floating mb-3">
+                    <SfTextBox Placeholder="Password" Type="InputType.Password" CssClass="e-outline"
+                        FloatLabelType="FloatLabelType.Always" @bind-Value="Input.Password" id="Input.Password" />
+                    <ValidationMessage For="() => Input.Password" class="text-danger small" />
+                </div>
+            }
+            <SfButton Type="submit" CssClass="e-danger w-100">Delete Data and Close My Account</SfButton>
+        </EditForm>
+    </div>
+</div>
+</div>
+</div>
+
+@code {
+    private string message;
+    private ApplicationUser user = default!;
+    private bool requirePassword;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+        user = await UserAccessor.GetRequiredUserAsync(HttpContext);
+        requirePassword = await UserManager.HasPasswordAsync(user);
+    }
+
+    private async Task OnValidSubmitAsync()
+    {
+        if (requirePassword && !await UserManager.CheckPasswordAsync(user, Input.Password))
+        {
+            message = "Error: Incorrect password.";
+            return;
+        }
+
+        var result = await UserManager.DeleteAsync(user);
+        if (!result.Succeeded)
+        {
+            throw new InvalidOperationException("Unexpected error occurred deleting user.");
+        }
+
+        await SignInManager.SignOutAsync();
+
+        var userId = await UserManager.GetUserIdAsync(user);
+        Logger.LogInformation("User with ID '{UserId}' deleted themselves.", userId);
+
+        RedirectManager.RedirectToCurrentPage();
+    }
+
+    private sealed class InputModel
+    {
+        [DataType(DataType.Password)]
+        public string Password { get; set; } = "";
+    }
+}

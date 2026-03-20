@@ -1,0 +1,58 @@
+@inherits LayoutComponentBase
+
+@inject NavigationManager NavigationManager
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-row">
+            <div class="navbar-container">
+                <div class="page-title">
+                    <h1>@GetPageTitle()</h1>
+                </div>
+                
+                <div class="navbar-actions">
+                    <AuthorizeView>
+                        <div class="user-profile">
+                            <div class="user-avatar">
+                                <i class="fas fa-user"></i>
+                            </div>
+                            <div class="user-info">
+                                <span class="user-name">@context.User.Identity?.Name</span>
+                            </div>
+                        </div>
+                    </AuthorizeView>
+                </div>
+            </div>
+        </div>
+
+        <article class="content p-16">
+            @Body
+        </article>
+    </main>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    private string GetPageTitle()
+    {
+        var path = NavigationManager.Uri.Split('/').LastOrDefault();
+        if (path.Equals("ProjectPage", StringComparison.OrdinalIgnoreCase))
+        return "Project Details";
+        if (string.IsNullOrEmpty(path) || path.Equals(NavigationManager.BaseUri.TrimEnd('/').Split('/').LastOrDefault()))
+            return "Dashboard";
+        
+        if (!string.IsNullOrEmpty(path))
+            return char.ToUpper(path[0]) + path.Substring(1);
+        
+        return "Dashboard";
+    }
+}
